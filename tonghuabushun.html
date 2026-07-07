@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>同花不顺 - A股回测模拟器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2236;
+            --bg-hover: #243049;
+            --border-color: #2d3a4f;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --rise-red: #ef4444;
+            --fall-green: #22c55e;
+            --gold: #f59e0b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Background grid effect */
+        .bg-grid {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none; z-index: 0;
+        }
+        .bg-glow {
+            position: fixed; top: -20%; right: -10%; width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+            pointer-events: none; z-index: 0; border-radius: 50%;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+        
+        /* Animations */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(59,130,246,0.3); }
+            50% { box-shadow: 0 0 20px rgba(59,130,246,0.6); }
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes countUp {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes barGrow {
+            from { transform: scaleY(0); }
+            to { transform: scaleY(1); }
+        }
+        
+        .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+        .animate-slide-in { animation: slideIn 0.5s ease-out forwards; }
+        
+        /* Card styles */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+        .card:hover { border-color: var(--accent-blue); box-shadow: 0 4px 20px rgba(59,130,246,0.1); }
+        
+        /* Input styles */
+        .custom-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            padding: 10px 14px;
+            width: 100%;
+            transition: all 0.3s ease;
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        .custom-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        
+        /* Button styles */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59,130,246,0.35);
+        }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-secondary:hover { background: var(--bg-hover); border-color: var(--accent-blue); }
+        
+        /* Stock list */
+        .stock-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+        }
+        .stock-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(45,58,79,0.5);
+            transition: all 0.2s ease;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .stock-item:hover { background: var(--bg-hover); }
+        .stock-item.selected { background: rgba(59,130,246,0.15); border-left: 3px solid var(--accent-blue); }
+        .stock-item .stock-code { font-family: 'JetBrains Mono', monospace; color: var(--accent-cyan); font-size: 0.9em; }
+        .stock-item .stock-name { color: var(--text-primary); font-weight: 500; }
+        
+        /* Monthly animation bar */
+        .month-bar-container {
+            display: flex; align-items: flex-end;
+            height: 200px; gap: 4px;
+            padding: 20px 10px 30px;
+            position: relative;
+        }
+        .month-bar {
+            flex: 1;
+            border-radius: 4px 4px 0 0;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            min-width: 20px;
+            transform-origin: bottom;
+            animation: barGrow 0.8s ease-out forwards;
+        }
+        .month-bar .month-label {
+            position: absolute; bottom: -24px; left: 50%; transform: translateX(-50%);
+            font-size: 0.7em; color: var(--text-secondary); white-space: nowrap;
+        }
+        .month-bar .value-label {
+            position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+            font-size: 0.7em; font-weight: 600; white-space: nowrap;
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .month-bar:hover .value-label { opacity: 1; }
+        
+        /* Summary cards */
+        .summary-card {
+            background: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(6,182,212,0.05));
+            border: 1px solid rgba(59,130,246,0.2);
+            border-radius: 12px;
+            padding: 16px 12px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            min-width: 0;
+        }
+        .summary-card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
+        }
+        .summary-card .label { color: var(--text-secondary); font-size: 0.8em; margin-bottom: 6px; white-space: nowrap; }
+        .summary-card .value { font-size: clamp(1rem, 2.5vw, 1.5em); font-weight: 700; font-family: 'JetBrains Mono', monospace; word-break: break-all; overflow-wrap: break-word; line-height: 1.2; }
+        .summary-card.positive { border-color: rgba(34,197,94,0.3); background: linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.02)); }
+        .summary-card.positive::before { background: linear-gradient(90deg, transparent, var(--fall-green), transparent); }
+        .summary-card.negative { border-color: rgba(239,68,68,0.3); background: linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.02)); }
+        .summary-card.negative::before { background: linear-gradient(90deg, transparent, var(--rise-red), transparent); }
+        
+        /* Timeline animation */
+        .timeline-item {
+            display: flex; align-items: center; gap: 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+            opacity: 0;
+            animation: fadeInUp 0.5s ease-out forwards;
+        }
+        .timeline-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--accent-blue); flex-shrink: 0;
+            box-shadow: 0 0 8px rgba(59,130,246,0.5);
+        }
+        .timeline-date { font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); font-size: 0.85em; min-width: 80px; }
+        .timeline-content { flex: 1; }
+        .timeline-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+        
+        /* Loading spinner */
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 100; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 90vw; max-height: 90vh;
+            overflow: auto;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.active .modal-content { transform: scale(1); }
+        
+        /* Year selector tabs */
+        .year-tabs {
+            display: flex; gap: 8px; margin-bottom: 16px;
+        }
+        .year-tab {
+            padding: 8px 16px; border-radius: 6px;
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            color: var(--text-secondary); cursor: pointer;
+            transition: all 0.3s ease; font-size: 0.9em;
+        }
+        .year-tab:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+        .year-tab.active { background: var(--accent-blue); color: white; border-color: var(--accent-blue); }
+        
+        /* Progress animation */
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring-circle {
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        
+        /* Hide scrollbar for stock list but keep functionality */
+        .stock-list::-webkit-scrollbar { width: 4px; }
+        .stock-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    
+    <!-- Header -->
+    <header class="relative z-10 px-6 py-5 border-b border-[var(--border-color)]" style="background: rgba(10,14,26,0.8); backdrop-filter: blur(10px);">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">同</div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-wide">同花不顺</h1>
+                    <p class="text-xs text-[var(--text-secondary)]">A股回测模拟器 v1.0</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-[var(--text-secondary)]" id="currentDate"></span>
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span class="text-xs text-green-400">系统就绪</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="relative z-10 max-w-7xl mx-auto p-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left Panel: Controls -->
+            <div class="lg:col-span-4 space-y-6">
+                
+                <!-- Stock Selection -->
+                <div class="card p-5 animate-fade-in-up" style="animation-delay: 0.1s;">
+                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        股票选择
+                    </h2>
+                    
+                    <div class="mb-3">
+                        <div class="flex gap-2 mb-2">
+                            <input type="text" id="stockSearch" class="custom-input" placeholder="输入股票代码或名称搜索..." oninput="filterStocks(this.value)">
+                            <button class="btn-secondary px-3" onclick="clearStockSearch()" title="清除">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                        <div class="stock-list" id="stockList">
+                            <!-- Stock items will be populated here -->
+                        </div>
+                        <div class="mt-2 text-xs text-[var(--text-secondary)] flex justify-between">
+                            <span id="stockCount">已加载 0 只股票</span>
+                            <button class="text-blue-400 hover:text-blue-300 underline" onclick="showAllStocks()">查看全部</button>
+                        </div>
+                    </div>
+                    
+                    <div id="selectedStock" class="hidden p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)]">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="text-sm text-[var(--text-secondary)]">已选择</span>
+                                <div class="font-bold text-lg"><span id="selCode" class="text-cyan-400 font-mono"></span> <span id="selName"></span></div>
+                            </div>
+                            <button onclick="clearSelectedStock()" class="text-[var(--text-secondary)] hover:text-red-400 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Parameters -->
+                <div class="card p-5 animate-fade-in-up" style="animation-delay: 0.2s;">
+                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                        回测参数
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-[var(--text-secondary)] mb-2">初始投资金额（元）</label>
+                            <input type="number" id="initialAmount" class="custom-input font-mono" value="100000" min="1000" step="1000">
+                            <div class="mt-1 flex gap-2">
+                                <button class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-white transition-colors" onclick="setAmount(10000)">1万</button>
+                                <button class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-white transition-colors" onclick="setAmount(100000)">10万</button>
+                                <button class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-white transition-colors" onclick="setAmount(500000)">50万</button>
+                                <button class="text-xs px-2 py-1 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-white transition-colors" onclick="setAmount(1000000)">100万</button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm text-[var(--text-secondary)] mb-2">回溯年限</label>
+                            <select id="backYears" class="custom-input">
+                                <option value="1">1年</option>
+                                <option value="2">2年</option>
+                                <option value="3">3年</option>
+                                <option value="5">5年</option>
+                                <option value="10" selected>10年</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm text-[var(--text-secondary)] mb-2">买入策略</label>
+                            <select id="strategy" class="custom-input">
+                                <option value="lump">一次性全仓买入</option>
+                                <option value="monthly">按月定投</option>
+                                <option value="weekly">按周定投</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm text-[var(--text-secondary)] mb-2">买入日期</label>
+                            <input type="date" id="buyDate" class="custom-input font-mono">
+                        </div>
+                    </div>
+                    
+                    <button id="runBtn" class="btn-primary w-full mt-6 flex items-center justify-center gap-2" onclick="runBacktest()">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        开始回测
+                    </button>
+                </div>
+                
+                <!-- External Data Source -->
+                <div class="card p-4 animate-fade-in-up" style="animation-delay: 0.3s;">
+                    <div class="text-sm font-medium mb-2 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                        外部股票数据源
+                    </div>
+                    <input type="text" id="externalAPI" class="custom-input text-xs mb-2" placeholder="输入数据源URL (JSON格式)" onchange="externalStockAPI=this.value">
+                    <div class="flex gap-2 mb-2">
+                        <button class="btn-secondary text-xs py-2 flex-1" onclick="loadExternalStocks()">加载外部数据</button>
+                        <button class="btn-secondary text-xs py-2 flex-1" onclick="resetToBuiltinStocks()">恢复内置数据</button>
+                    </div>
+                    <button class="btn-primary text-xs py-2 w-full mb-2" onclick="reloadFromJSON()">重新加载 all_stocks.json</button>
+                    <div class="mt-1 text-xs text-[var(--text-secondary)]">
+                        支持: JSON文件 / QuickSync API / 自定义URL
+                    </div>
+                </div>
+
+                <!-- Data Source Info -->
+                <div class="card p-4 animate-fade-in-up" style="animation-delay: 0.35s;">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                        <div class="text-sm">
+                            <div class="text-[var(--text-secondary)]">数据来源</div>
+                            <div class="text-xs text-[var(--text-secondary)]">腾讯财经 / 新浪财经</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel: Results -->
+            <div class="lg:col-span-8 space-y-6">
+                
+                <!-- Initial State -->
+                <div id="initialState" class="card p-10 text-center animate-fade-in-up" style="animation-delay: 0.2s;">
+                    <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-400/20 flex items-center justify-center">
+                        <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold mb-2">准备就绪</h3>
+                    <p class="text-[var(--text-secondary)] mb-6">选择股票并设置参数后，点击"开始回测"查看模拟结果</p>
+                    <div class="flex justify-center gap-4 text-xs text-[var(--text-secondary)]">
+                        <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-green-500"></div> 支持全部A股</div>
+                        <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-blue-500"></div> 历史数据回溯</div>
+                        <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-cyan-500"></div> 动画展示</div>
+                    </div>
+                </div>
+                
+                <!-- Loading State -->
+                <div id="loadingState" class="hidden card p-10 text-center">
+                    <div class="spinner mx-auto mb-4"></div>
+                    <h3 class="text-lg font-bold mb-2">正在计算回测数据...</h3>
+                    <p class="text-sm text-[var(--text-secondary)]" id="loadingText">正在获取股票历史数据</p>
+                </div>
+                
+                <!-- Results State -->
+                <div id="resultsState" class="hidden space-y-6">
+                    
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="summary-card animate-fade-in-up" style="animation-delay: 0.1s;">
+                            <div class="label">初始本金</div>
+                            <div class="value text-[var(--text-primary)]" id="sumInitial">-</div>
+                        </div>
+                        <div class="summary-card animate-fade-in-up" style="animation-delay: 0.2s;">
+                            <div class="label">当前总资产</div>
+                            <div class="value text-[var(--accent-cyan)]" id="sumCurrent">-</div>
+                        </div>
+                        <div class="summary-card animate-fade-in-up" id="sumPnlCard" style="animation-delay: 0.3s;">
+                            <div class="label">总盈亏</div>
+                            <div class="value" id="sumPnl">-</div>
+                        </div>
+                        <div class="summary-card animate-fade-in-up" id="sumReturnCard" style="animation-delay: 0.4s;">
+                            <div class="label">总收益率</div>
+                            <div class="value" id="sumReturn">-</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart Section -->
+                    <div class="card p-5 animate-fade-in-up" style="animation-delay: 0.3s;">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                            资产变化趋势
+                        </h3>
+                        <div class="h-80">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Monthly Animation Section -->
+                    <div class="card p-5 animate-fade-in-up" style="animation-delay: 0.4s;">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold flex items-center gap-2">
+                                <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                月度收益趋势
+                            </h3>
+                            <div class="year-tabs" id="yearTabs"></div>
+                        </div>
+                        <div class="h-64">
+                            <canvas id="monthlyChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Timeline -->
+                    <div class="card p-5 animate-fade-in-up" style="animation-delay: 0.5s;">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            关键节点记录
+                        </h3>
+                        <div id="timelineList" class="space-y-0">
+                            <!-- Timeline items will be rendered here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Monthly Table -->
+                    <div class="card p-5 animate-fade-in-up" style="animation-delay: 0.6s;">
+                        <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            月度明细数据
+                        </h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-[var(--border-color)]">
+                                        <th class="text-left py-3 px-2 text-[var(--text-secondary)] font-medium">日期</th>
+                                        <th class="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">月末净值</th>
+                                        <th class="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">当月盈亏</th>
+                                        <th class="text-right py-3 px-2 text-[var(--text-secondary)] font-medium">累计收益率</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="monthlyTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- All Stocks Modal -->
+    <div class="modal-overlay" id="stockModal">
+        <div class="modal-content w-full max-w-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold">全部A股列表</h3>
+                <button onclick="closeStockModal()" class="text-[var(--text-secondary)] hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <input type="text" class="custom-input mb-4" placeholder="搜索股票代码或名称..." oninput="filterModalStocks(this.value)">
+            <div class="stock-list" id="modalStockList" style="max-height: 60vh;"></div>
+        </div>
+    </div>
+
+    <script>
+// ==================== A股股票列表数据 ====================
+const allStocks = [
+{code:"000001",name:"平安银行"},{code:"000002",name:"万科A"},{code:"000063",name:"中兴通讯"},{code:"000100",name:"TCL科技"},
+{code:"000333",name:"美的集团"},{code:"000338",name:"潍柴动力"},{code:"000568",name:"泸州老窖"},{code:"000596",name:"古井贡酒"},
+{code:"000625",name:"长安汽车"},{code:"000651",name:"格力电器"},{code:"000725",name:"京东方A"},{code:"000768",name:"中航西飞"},
+{code:"000858",name:"五粮液"},{code:"000895",name:"双汇发展"},{code:"001289",name:"龙源电力"},{code:"001979",name:"招商蛇口"},
+{code:"002001",name:"新和成"},{code:"002007",name:"华兰生物"},{code:"002008",name:"大族激光"},{code:"002024",name:"苏宁易购"},
+{code:"002027",name:"分众传媒"},{code:"002049",name:"紫光国微"},{code:"002120",name:"韵达股份"},{code:"002142",name:"宁波银行"},
+{code:"002230",name:"科大讯飞"},{code:"002236",name:"大华股份"},{code:"002271",name:"东方雨虹"},{code:"002304",name:"洋河股份"},
+{code:"002311",name:"海大集团"},{code:"002352",name:"顺丰控股"},{code:"002371",name:"北方华创"},{code:"002410",name:"广联达"},
+{code:"002415",name:"海康威视"},{code:"002460",name:"赣锋锂业"},{code:"002475",name:"立讯精密"},{code:"002493",name:"荣盛石化"},
+{code:"002555",name:"三七互娱"},{code:"002594",name:"比亚迪"},{code:"002601",name:"龙佰集团"},{code:"002648",name:"卫星化学"},
+{code:"002714",name:"牧原股份"},{code:"002812",name:"恩捷股份"},{code:"002821",name:"凯莱英"},{code:"002841",name:"视源股份"},
+{code:"003816",name:"中国广核"},{code:"300003",name:"乐普医疗"},{code:"300014",name:"亿纬锂能"},{code:"300015",name:"爱尔眼科"},
+{code:"300033",name:"同花顺"},{code:"300059",name:"东方财富"},{code:"300122",name:"智飞生物"},{code:"300124",name:"汇川技术"},
+{code:"300142",name:"沃森生物"},{code:"300274",name:"阳光电源"},{code:"300408",name:"三环集团"},{code:"300413",name:"芒果超媒"},
+{code:"300433",name:"蓝思科技"},{code:"300442",name:"润泽科技"},{code:"300496",name:"中科创达"},{code:"300498",name:"温氏股份"},
+{code:"300750",name:"宁德时代"},{code:"300760",name:"迈瑞医疗"},{code:"300832",name:"新产业"},{code:"300919",name:"中伟股份"},
+{code:"300979",name:"华利集团"},{code:"600000",name:"浦发银行"},{code:"600009",name:"上海机场"},{code:"600010",name:"包钢股份"},
+{code:"600011",name:"华能国际"},{code:"600015",name:"华夏银行"},{code:"600016",name:"民生银行"},{code:"600019",name:"宝钢股份"},
+{code:"600023",name:"浙能电力"},{code:"600025",name:"华能水电"},{code:"600028",name:"中国石化"},{code:"600029",name:"南方航空"},
+{code:"600030",name:"中信证券"},{code:"600031",name:"三一重工"},{code:"600036",name:"招商银行"},{code:"600048",name:"保利发展"},
+{code:"600050",name:"中国联通"},{code:"600061",name:"国投资本"},{code:"600085",name:"同仁堂"},{code:"600104",name:"上汽集团"},
+{code:"600111",name:"北方稀土"},{code:"600115",name:"中国东航"},{code:"600132",name:"重庆啤酒"},{code:"600143",name:"金发科技"},
+{code:"600150",name:"中国船舶"},{code:"600161",name:"天坛生物"},{code:"600176",name:"中国巨石"},{code:"600183",name:"生益科技"},
+{code:"600196",name:"复星医药"},{code:"600219",name:"南山铝业"},{code:"600233",name:"圆通速递"},{code:"600276",name:"恒瑞医药"},
+{code:"600309",name:"万华化学"},{code:"600315",name:"上海家化"},{code:"600332",name:"白云山"},{code:"600346",name:"恒力石化"},
+{code:"600352",name:"龙盛集团"},{code:"600362",name:"江西铜业"},{code:"600372",name:"中航机载"},{code:"600383",name:"金地集团"},
+{code:"600406",name:"国电南瑞"},{code:"600415",name:"小商品城"},{code:"600436",name:"片仔癀"},{code:"600438",name:"通威股份"},
+{code:"600460",name:"士兰微"},{code:"600489",name:"中金黄金"},{code:"600497",name:"驰宏锌锗"},{code:"600498",name:"烽火通信"},
+{code:"600519",name:"贵州茅台"},{code:"600547",name:"山东黄金"},{code:"600570",name:"恒生电子"},{code:"600584",name:"长电科技"},
+{code:"600585",name:"海螺水泥"},{code:"600588",name:"用友网络"},{code:"600600",name:"青岛啤酒"},{code:"600606",name:"绿地控股"},
+{code:"600637",name:"东方明珠"},{code:"600660",name:"福耀玻璃"},{code:"600674",name:"川投能源"},{code:"600690",name:"海尔智家"},
+{code:"600703",name:"三安光电"},{code:"600741",name:"华域汽车"},{code:"600745",name:"闻泰科技"},{code:"600754",name:"锦江酒店"},
+{code:"600760",name:"中航沈飞"},{code:"600795",name:"国电电力"},{code:"600809",name:"山西汾酒"},{code:"600837",name:"海通证券"},
+{code:"600845",name:"宝信软件"},{code:"600862",name:"中航高科"},{code:"600875",name:"东方电气"},{code:"600885",name:"宏发股份"},
+{code:"600886",name:"国投电力"},{code:"600887",name:"伊利股份"},{code:"600893",name:"航发动力"},{code:"600900",name:"长江电力"},
+{code:"600905",name:"三峡能源"},{code:"600919",name:"江苏银行"},{code:"600926",name:"杭州银行"},{code:"600938",name:"中国海油"},
+{code:"600941",name:"中国移动"},{code:"600958",name:"东方证券"},{code:"600989",name:"宝丰能源"},{code:"600999",name:"招商证券"},
+{code:"601006",name:"大秦铁路"},{code:"601009",name:"南京银行"},{code:"601012",name:"隆基绿能"},{code:"601021",name:"春秋航空"},
+{code:"601066",name:"中信建投"},{code:"601077",name:"渝农商行"},{code:"601088",name:"中国神华"},{code:"601099",name:"太平洋"},
+{code:"601100",name:"恒立液压"},{code:"601108",name:"财通证券"},{code:"601111",name:"中国国航"},{code:"601117",name:"中国化学"},
+{code:"601138",name:"工业富联"},{code:"601155",name:"新城控股"},{code:"601166",name:"兴业银行"},{code:"601169",name:"北京银行"},
+{code:"601186",name:"中国铁建"},{code:"601211",name:"国泰君安"},{code:"601216",name:"君正集团"},{code:"601225",name:"陕西煤业"},
+{code:"601229",name:"上海银行"},{code:"601236",name:"红塔证券"},{code:"601288",name:"农业银行"},{code:"601318",name:"中国平安"},
+{code:"601319",name:"中国人保"},{code:"601328",name:"交通银行"},{code:"601336",name:"新华保险"},{code:"601360",name:"三六零"},
+{code:"601377",name:"兴业证券"},{code:"601390",name:"中国中铁"},{code:"601398",name:"工商银行"},{code:"601555",name:"东吴证券"},
+{code:"601566",name:"九牧王"},{code:"601577",name:"长沙银行"},{code:"601600",name:"中国铝业"},{code:"601601",name:"中国太保"},
+{code:"601618",name:"中国中冶"},{code:"601628",name:"中国人寿"},{code:"601633",name:"长城汽车"},{code:"601658",name:"邮储银行"},
+{code:"601668",name:"中国建筑"},{code:"601669",name:"中国电建"},{code:"601688",name:"华泰证券"},{code:"601698",name:"中国卫通"},
+{code:"601728",name:"中国电信"},{code:"601766",name:"中国中车"},{code:"601788",name:"光大证券"},{code:"601799",name:"星宇股份"},
+{code:"601800",name:"中国交建"},{code:"601808",name:"中海油服"},{code:"601816",name:"京沪高铁"},{code:"601818",name:"光大银行"},
+{code:"601828",name:"美凯龙"},{code:"601838",name:"成都银行"},{code:"601857",name:"中国石油"},{code:"601868",name:"中国能建"},
+{code:"601877",name:"正泰电器"},{code:"601878",name:"浙商证券"},{code:"601881",name:"中国银河"},{code:"601888",name:"中国中免"},
+{code:"601899",name:"紫金矿业"},{code:"601901",name:"方正证券"},{code:"601916",name:"浙商银行"},{code:"601919",name:"中远海控"},
+{code:"601933",name:"永辉超市"},{code:"601939",name:"建设银行"},{code:"601958",name:"金钼股份"},{code:"601963",name:"重庆银行"},
+{code:"601985",name:"中国核电"},{code:"601988",name:"中国银行"},{code:"601989",name:"中国重工"},{code:"601990",name:"南京证券"},
+{code:"601995",name:"中金公司"},{code:"601998",name:"中信银行"},{code:"603019",name:"中科曙光"},{code:"603087",name:"甘李药业"},
+{code:"603129",name:"春风动力"},{code:"603195",name:"公牛集团"},{code:"603259",name:"药明康德"},{code:"603260",name:"合盛硅业"},
+{code:"603288",name:"海天味业"},{code:"603296",name:"华勤技术"},{code:"603299",name:"苏盐井神"},{code:"603369",name:"今世缘"},
+{code:"603392",name:"万泰生物"},{code:"603486",name:"科沃斯"},{code:"603501",name:"韦尔股份"},{code:"603505",name:"金石资源"},
+{code:"603520",name:"司太立"},{code:"603596",name:"伯特利"},{code:"603606",name:"东方电缆"},{code:"603659",name:"璞泰来"},
+{code:"603690",name:"至纯科技"},{code:"603799",name:"华友钴业"},{code:"603806",name:"福斯特"},{code:"603833",name:"欧派家居"},
+{code:"603899",name:"晨光股份"},{code:"603986",name:"兆易创新"},{code:"603993",name:"洛阳钼业"},{code:"605117",name:"德业股份"},
+{code:"688008",name:"澜起科技"},{code:"688009",name:"中国通号"},{code:"688012",name:"中微公司"},{code:"688036",name:"传音控股"},
+{code:"688041",name:"海光信息"},{code:"688065",name:"凯赛生物"},{code:"688082",name:"盛美上海"},{code:"688111",name:"金山办公"},
+{code:"688126",name:"沪硅产业"},{code:"688169",name:"石头科技"},{code:"688187",name:"时代电气"},{code:"688223",name:"晶科能源"},
+{code:"688256",name:"寒武纪"},{code:"688271",name:"联影医疗"},{code:"688303",name:"大全能源"},{code:"688363",name:"华熙生物"},
+{code:"688396",name:"华润微"},{code:"688599",name:"天合光能"},{code:"688981",name:"中芯国际"},{code:"689009",name:"九号公司"}
+];
+
+// ==================== 状态管理 ====================
+let selectedStock = null;
+let chartInstance = null;
+let monthlyChartInstance = null;
+let backtestData = null;
+let externalStockAPI = ''; // 外部股票数据源URL，可由用户设置
+
+// ==================== 工具函数 ====================
+function formatNumber(num) {
+    if (num >= 100000000) return (num / 100000000).toFixed(2) + '亿';
+    if (num >= 10000) return (num / 10000).toFixed(2) + '万';
+    return num.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function formatCurrency(num) {
+    return '¥' + num.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function formatPercent(num) {
+    const sign = num >= 0 ? '+' : '';
+    return sign + num.toFixed(2) + '%';
+}
+
+function getTodayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function getExchangePrefix(code) {
+    const c = code.charAt(0);
+    if (c === '6' || c === '5' || c === '9') return 'sh' + code;
+    return 'sz' + code;
+}
+
+// ==================== 初始化 ====================
+document.getElementById('currentDate').textContent = getTodayStr();
+document.getElementById('buyDate').value = getTodayStr();
+
+// 设置默认买入日期为十年前
+document.getElementById('buyDate').value = (new Date().getFullYear() - 10) + '-01-02';
+
+// 启动时尝试从 all_stocks.json 加载，失败则回退内置数据
+async function initStockList() {
+    try {
+        const resp = await fetch('all_stocks.json');
+        if (resp.ok) {
+            const data = await resp.json();
+            if (Array.isArray(data) && data.length > 0 && data[0].code && data[0].name) {
+                allStocks.length = 0;
+                allStocks.push(...data);
+                document.getElementById('stockCount').textContent = `已加载 ${allStocks.length} 只股票（JSON文件）`;
+                renderStockList(allStocks.slice(0, 20), 'stockList');
+                return;
+            }
+        }
+    } catch (e) {
+        console.log('JSON加载失败，使用内置数据:', e);
+    }
+    document.getElementById('stockCount').textContent = `已加载 ${allStocks.length} 只股票（内置）`;
+    renderStockList(allStocks.slice(0, 20), 'stockList');
+}
+initStockList();
+
+function renderStockList(stocks, elementId, showIndex = false) {
+    const el = document.getElementById(elementId);
+    el.innerHTML = stocks.map((s, i) => `
+        <div class="stock-item ${selectedStock && selectedStock.code === s.code ? 'selected' : ''}" onclick="selectStock('${s.code}', '${s.name}')">
+            <div>
+                <span class="stock-code">${s.code}</span>
+                <span class="stock-name ml-2">${s.name}</span>
+            </div>
+            ${showIndex ? `<span class="text-xs text-[var(--text-secondary)]">${i+1}</span>` : ''}
+        </div>
+    `).join('');
+}
+
+function filterStocks(keyword) {
+    if (!keyword) {
+        renderStockList(allStocks.slice(0, 20), 'stockList');
+        return;
+    }
+    const kw = keyword.toLowerCase();
+    const filtered = allStocks.filter(s => s.code.includes(kw) || s.name.toLowerCase().includes(kw)).slice(0, 50);
+    renderStockList(filtered, 'stockList');
+}
+
+function clearStockSearch() {
+    document.getElementById('stockSearch').value = '';
+    renderStockList(allStocks.slice(0, 20), 'stockList');
+}
+
+function selectStock(code, name) {
+    selectedStock = {code, name};
+    document.getElementById('selCode').textContent = code;
+    document.getElementById('selName').textContent = name;
+    document.getElementById('selectedStock').classList.remove('hidden');
+    renderStockList(allStocks.slice(0, 20), 'stockList');
+    closeStockModal();
+}
+
+function clearSelectedStock() {
+    selectedStock = null;
+    document.getElementById('selectedStock').classList.add('hidden');
+    renderStockList(allStocks.slice(0, 20), 'stockList');
+}
+
+function showAllStocks() {
+    document.getElementById('stockModal').classList.add('active');
+    renderStockList(allStocks, 'modalStockList', true);
+}
+
+function closeStockModal() {
+    document.getElementById('stockModal').classList.remove('active');
+}
+
+function filterModalStocks(keyword) {
+    if (!keyword) {
+        renderStockList(allStocks, 'modalStockList', true);
+        return;
+    }
+    const kw = keyword.toLowerCase();
+    const filtered = allStocks.filter(s => s.code.includes(kw) || s.name.toLowerCase().includes(kw));
+    renderStockList(filtered, 'modalStockList', true);
+}
+
+function setAmount(v) {
+    document.getElementById('initialAmount').value = v;
+}
+
+// ==================== 外部股票数据加载 ====================
+const builtinStocks = [...allStocks]; // 备份内置股票数据
+
+async function loadExternalStocks() {
+    const url = document.getElementById('externalAPI').value.trim();
+    if (!url) {
+        alert('请先输入数据源URL');
+        return;
+    }
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0 && data[0].code && data[0].name) {
+            allStocks.length = 0;
+            allStocks.push(...data);
+            document.getElementById('stockCount').textContent = `已加载 ${allStocks.length} 只股票（外部数据源）`;
+            renderStockList(allStocks.slice(0, 20), 'stockList');
+            selectedStock = null;
+            document.getElementById('selectedStock').classList.add('hidden');
+            alert(`成功加载 ${data.length} 只股票`);
+        } else {
+            alert('数据格式不正确，期望: [{"code":"...","name":"..."}, ...]');
+        }
+    } catch (e) {
+        alert('加载失败: ' + e.message);
+    }
+}
+
+function resetToBuiltinStocks() {
+    allStocks.length = 0;
+    allStocks.push(...builtinStocks);
+    document.getElementById('stockCount').textContent = `已加载 ${allStocks.length} 只股票（内置）`;
+    renderStockList(allStocks.slice(0, 20), 'stockList');
+    selectedStock = null;
+    document.getElementById('selectedStock').classList.add('hidden');
+    document.getElementById('externalAPI').value = '';
+    externalStockAPI = '';
+}
+
+async function reloadFromJSON() {
+    try {
+        const resp = await fetch('all_stocks.json?t=' + Date.now());
+        if (resp.ok) {
+            const data = await resp.json();
+            if (Array.isArray(data) && data.length > 0 && data[0].code && data[0].name) {
+                allStocks.length = 0;
+                allStocks.push(...data);
+                document.getElementById('stockCount').textContent = `已加载 ${allStocks.length} 只股票（JSON文件）`;
+                renderStockList(allStocks.slice(0, 20), 'stockList');
+                selectedStock = null;
+                document.getElementById('selectedStock').classList.add('hidden');
+                alert(`成功加载 ${data.length} 只股票`);
+                return;
+            }
+        }
+        alert('all_stocks.json 不存在或格式错误');
+    } catch (e) {
+        alert('加载失败: ' + e.message);
+    }
+}
+
+// ==================== 数据获取 ====================
+async function fetchStockHistory(symbol, startDate, endDate) {
+    // 腾讯财经K线接口
+    const prefix = getExchangePrefix(symbol);
+    const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${prefix},day,${startDate},${endDate},500,qfq`;
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        const key = prefix;
+        if (data.data && data.data[key] && data.data[key].qfqday) {
+            return data.data[key].qfqday.map(item => ({
+                date: item[0],
+                open: parseFloat(item[1]),
+                close: parseFloat(item[2]),
+                low: parseFloat(item[3]),
+                high: parseFloat(item[4]),
+                volume: parseInt(item[5])
+            }));
+        }
+    } catch (e) {
+        console.error('Fetch error:', e);
+    }
+    return null;
+}
+
+function generateMockHistory(startDate, endDate, years) {
+    // 生成模拟历史数据（基于随机游走）
+    const data = [];
+    let price = 10 + Math.random() * 20;
+    let current = new Date(startDate);
+    const end = new Date(endDate);
+    
+    while (current <= end) {
+        const dayOfWeek = current.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            const change = (Math.random() - 0.48) * 0.04;
+            price = price * (1 + change);
+            const dateStr = current.getFullYear() + '-' + String(current.getMonth()+1).padStart(2,'0') + '-' + String(current.getDate()).padStart(2,'0');
+            data.push({
+                date: dateStr,
+                open: price * (1 - Math.random()*0.01),
+                close: price,
+                low: price * (1 - Math.random()*0.02),
+                high: price * (1 + Math.random()*0.02),
+                volume: Math.floor(Math.random() * 1000000)
+            });
+        }
+        current.setDate(current.getDate() + 1);
+    }
+    return data;
+}
+
+// ==================== 回测计算 ====================
+function calculateBacktest(history, initialAmount, strategy, buyDate) {
+    const startIdx = history.findIndex(h => h.date >= buyDate);
+    if (startIdx === -1) return null;
+    
+    const data = history.slice(startIdx);
+    if (data.length === 0) return null;
+    
+    let shares = 0;
+    let cash = initialAmount;
+    let totalInvested = initialAmount;
+    const monthlyData = [];
+    
+    if (strategy === 'lump') {
+        // 一次性买入
+        const buyPrice = data[0].close;
+        shares = cash / buyPrice;
+        cash = 0;
+    }
+    
+    let currentMonth = '';
+    let monthStartValue = initialAmount;
+    let monthStartShares = shares;
+    let monthStartCash = cash;
+    
+    data.forEach((day, idx) => {
+        const month = day.date.substring(0, 7);
+        
+        if (strategy === 'monthly' && month !== currentMonth && idx > 0) {
+            // 按月定投
+            const monthlyAmount = initialAmount / (data[data.length-1].date.substring(0,7) === month ? 1 : Math.max(1, Math.ceil(data.length / 22)));
+            const investAmount = Math.min(monthlyAmount, cash);
+            if (investAmount > 0) {
+                shares += investAmount / day.close;
+                cash -= investAmount;
+                totalInvested += investAmount;
+            }
+        }
+        
+        if (month !== currentMonth) {
+            if (currentMonth !== '') {
+                const endValue = monthStartShares * day.close + monthStartCash;
+                const pnl = endValue - monthStartValue;
+                const returnRate = (endValue - totalInvested) / totalInvested * 100;
+                monthlyData.push({
+                    month: currentMonth,
+                    endValue: endValue,
+                    pnl: pnl,
+                    totalInvested: totalInvested,
+                    returnRate: returnRate,
+                    shares: monthStartShares,
+                    price: day.close
+                });
+            }
+            currentMonth = month;
+            monthStartValue = shares * day.close + cash;
+            monthStartShares = shares;
+            monthStartCash = cash;
+        }
+        
+        if (idx === data.length - 1) {
+            const endValue = shares * day.close + cash;
+            const pnl = endValue - monthStartValue;
+            const returnRate = (endValue - totalInvested) / totalInvested * 100;
+            monthlyData.push({
+                month: month,
+                endValue: endValue,
+                pnl: pnl,
+                totalInvested: totalInvested,
+                returnRate: returnRate,
+                shares: shares,
+                price: day.close
+            });
+        }
+    });
+    
+    const finalValue = monthlyData[monthlyData.length - 1].endValue;
+    const totalPnl = finalValue - totalInvested;
+    const totalReturn = (totalPnl / totalInvested) * 100;
+    
+    return {
+        initialAmount,
+        totalInvested,
+        finalValue,
+        totalPnl,
+        totalReturn,
+        monthlyData,
+        startDate: data[0].date,
+        endDate: data[data.length-1].date,
+        history: data
+    };
+}
+
+// ==================== 运行回测 ====================
+async function runBacktest() {
+    if (!selectedStock) {
+        alert('请先选择一只股票');
+        return;
+    }
+    
+    const initialAmount = parseFloat(document.getElementById('initialAmount').value) || 100000;
+    const backYears = parseInt(document.getElementById('backYears').value) || 10;
+    const strategy = document.getElementById('strategy').value;
+    let buyDate = document.getElementById('buyDate').value;
+    
+    if (!buyDate) {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - backYears);
+        buyDate = d.getFullYear() + '-01-02';
+    }
+    
+    const endDate = getTodayStr();
+    
+    // 显示加载状态
+    document.getElementById('initialState').classList.add('hidden');
+    document.getElementById('resultsState').classList.add('hidden');
+    document.getElementById('loadingState').classList.remove('hidden');
+    document.getElementById('runBtn').disabled = true;
+    
+    // 获取数据
+    document.getElementById('loadingText').textContent = '正在获取 ' + selectedStock.name + ' 的历史数据...';
+    
+    let history = await fetchStockHistory(selectedStock.code, buyDate, endDate);
+    
+    if (!history || history.length === 0) {
+        document.getElementById('loadingText').textContent = '正在生成模拟数据...';
+        await new Promise(r => setTimeout(r, 500));
+        history = generateMockHistory(buyDate, endDate, backYears);
+    }
+    
+    document.getElementById('loadingText').textContent = '正在计算回测结果...';
+    await new Promise(r => setTimeout(r, 300));
+    
+    backtestData = calculateBacktest(history, initialAmount, strategy, buyDate);
+    
+    if (!backtestData) {
+        alert('回测计算失败，请检查日期设置');
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('initialState').classList.remove('hidden');
+        document.getElementById('runBtn').disabled = false;
+        return;
+    }
+    
+    // 渲染结果
+    document.getElementById('loadingState').classList.add('hidden');
+    document.getElementById('resultsState').classList.remove('hidden');
+    document.getElementById('runBtn').disabled = false;
+    
+    renderSummary();
+    renderChart();
+    renderMonthlyAnimation();
+    renderTimeline();
+    renderMonthlyTable();
+}
+
+// ==================== 渲染结果 ====================
+function renderSummary() {
+    const d = backtestData;
+    document.getElementById('sumInitial').textContent = formatCurrency(d.initialAmount);
+    document.getElementById('sumCurrent').textContent = formatCurrency(d.finalValue);
+    document.getElementById('sumPnl').textContent = (d.totalPnl >= 0 ? '+' : '') + formatCurrency(d.totalPnl);
+    document.getElementById('sumReturn').textContent = formatPercent(d.totalReturn);
+    
+    const pnlCard = document.getElementById('sumPnlCard');
+    const returnCard = document.getElementById('sumReturnCard');
+    
+    if (d.totalPnl >= 0) {
+        pnlCard.classList.add('positive');
+        pnlCard.classList.remove('negative');
+        returnCard.classList.add('positive');
+        returnCard.classList.remove('negative');
+        document.getElementById('sumPnl').style.color = 'var(--fall-green)';
+        document.getElementById('sumReturn').style.color = 'var(--fall-green)';
+    } else {
+        pnlCard.classList.add('negative');
+        pnlCard.classList.remove('positive');
+        returnCard.classList.add('negative');
+        returnCard.classList.remove('positive');
+        document.getElementById('sumPnl').style.color = 'var(--rise-red)';
+        document.getElementById('sumReturn').style.color = 'var(--rise-red)';
+    }
+}
+
+function renderChart() {
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    
+    const labels = backtestData.monthlyData.map(m => m.month);
+    const values = backtestData.monthlyData.map(m => m.endValue);
+    const invested = backtestData.monthlyData.map(m => m.totalInvested);
+    
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '总资产',
+                    data: values,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 6
+                },
+                {
+                    label: '累计投入',
+                    data: invested,
+                    borderColor: '#94a3b8',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    labels: { color: '#94a3b8', font: { family: 'Noto Sans SC' } }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(17,24,39,0.9)',
+                    titleColor: '#e2e8f0',
+                    bodyColor: '#e2e8f0',
+                    borderColor: '#2d3a4f',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ¥' + context.parsed.y.toLocaleString('zh-CN', {minimumFractionDigits: 2});
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(45,58,79,0.3)' },
+                    ticks: { color: '#94a3b8', maxTicksLimit: 12 }
+                },
+                y: {
+                    grid: { color: 'rgba(45,58,79,0.3)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        callback: function(value) {
+                            return '¥' + (value / 10000).toFixed(0) + '万';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderMonthlyAnimation() {
+    const monthlyData = backtestData.monthlyData;
+    const years = [...new Set(monthlyData.map(m => m.month.substring(0, 4)))];
+
+    // 生成年份标签
+    const tabsContainer = document.getElementById('yearTabs');
+    tabsContainer.innerHTML = years.map((y, i) => `
+        <div class="year-tab ${i === years.length - 1 ? 'active' : ''}" onclick="switchYear('${y}', this)">${y}</div>
+    `).join('');
+
+    // 默认显示最后一年
+    renderYearChart(years[years.length - 1]);
+}
+
+function switchYear(year, tabEl) {
+    document.querySelectorAll('.year-tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+    renderYearChart(year);
+}
+
+function renderYearChart(year) {
+    const ctx = document.getElementById('monthlyChart').getContext('2d');
+    const yearData = backtestData.monthlyData.filter(m => m.month.startsWith(year));
+
+    if (yearData.length === 0) return;
+
+    if (monthlyChartInstance) {
+        monthlyChartInstance.destroy();
+    }
+
+    const labels = yearData.map(m => m.month.substring(5, 7) + '月');
+    const values = yearData.map(m => m.endValue);
+    const pnlColors = yearData.map(m => m.pnl >= 0 ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.6)');
+    const pnlBorderColors = yearData.map(m => m.pnl >= 0 ? '#22c55e' : '#ef4444');
+
+    monthlyChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '月末资产',
+                    data: values,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.15)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: pnlColors,
+                    pointBorderColor: pnlBorderColors,
+                    pointBorderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 800,
+                easing: 'easeOutQuart'
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(17,24,39,0.9)',
+                    titleColor: '#e2e8f0',
+                    bodyColor: '#e2e8f0',
+                    borderColor: '#2d3a4f',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            const idx = context.dataIndex;
+                            const pnl = yearData[idx].pnl;
+                            const sign = pnl >= 0 ? '+' : '';
+                            return [
+                                '月末资产: ¥' + context.parsed.y.toLocaleString('zh-CN', {minimumFractionDigits: 2}),
+                                '当月盈亏: ' + sign + '¥' + pnl.toLocaleString('zh-CN', {minimumFractionDigits: 2})
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(45,58,79,0.2)' },
+                    ticks: { color: '#94a3b8' }
+                },
+                y: {
+                    grid: { color: 'rgba(45,58,79,0.2)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        callback: function(value) {
+                            return '¥' + (value / 10000).toFixed(0) + '万';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderTimeline() {
+    const monthlyData = backtestData.monthlyData;
+    const list = document.getElementById('timelineList');
+    
+    // 找出关键节点：最大盈利月、最大亏损月、回本点
+    let maxProfit = {pnl: -Infinity};
+    let maxLoss = {pnl: Infinity};
+    let breakEven = null;
+    
+    monthlyData.forEach(m => {
+        if (m.pnl > maxProfit.pnl) maxProfit = m;
+        if (m.pnl < maxLoss.pnl) maxLoss = m;
+        if (!breakEven && m.returnRate >= 0) breakEven = m;
+    });
+    
+    const items = [];
+    items.push({
+        date: backtestData.startDate,
+        title: '开始投资',
+        desc: `以 ${formatCurrency(backtestData.initialAmount)} 起步`
+    });
+    
+    if (breakEven && breakEven.month !== backtestData.monthlyData[0].month) {
+        items.push({
+            date: breakEven.month + '-01',
+            title: '首次回本',
+            desc: `累计收益率达 ${formatPercent(breakEven.returnRate)}`
+        });
+    }
+    
+    items.push({
+        date: maxLoss.month + '-01',
+        title: '最大单月亏损',
+        desc: `${formatCurrency(maxLoss.pnl)}`
+    });
+    
+    items.push({
+        date: maxProfit.month + '-01',
+        title: '最大单月盈利',
+        desc: `+${formatCurrency(maxProfit.pnl)}`
+    });
+    
+    items.push({
+        date: backtestData.endDate,
+        title: '当前状态',
+        desc: `总资产 ${formatCurrency(backtestData.finalValue)}，累计${backtestData.totalPnl >= 0 ? '盈利' : '亏损'} ${formatCurrency(Math.abs(backtestData.totalPnl))}`
+    });
+    
+    list.innerHTML = items.map((item, i) => `
+        <div class="timeline-item" style="animation-delay: ${i * 0.15}s">
+            <div class="timeline-dot"></div>
+            <div class="timeline-date">${item.date}</div>
+            <div class="timeline-content">
+                <div class="font-medium">${item.title}</div>
+                <div class="text-sm text-[var(--text-secondary)]">${item.desc}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderMonthlyTable() {
+    const tbody = document.getElementById('monthlyTable');
+    const reversed = [...backtestData.monthlyData].reverse();
+    
+    tbody.innerHTML = reversed.map((m, i) => {
+        const isProfit = m.pnl >= 0;
+        return `
+            <tr class="border-b border-[var(--border-color)] hover:bg-[var(--bg-hover)] transition-colors" style="animation: fadeInUp 0.3s ease-out ${i * 0.03}s forwards; opacity: 0;">
+                <td class="py-3 px-2 font-mono">${m.month}</td>
+                <td class="py-3 px-2 text-right font-mono">${formatCurrency(m.endValue)}</td>
+                <td class="py-3 px-2 text-right font-mono ${isProfit ? 'text-green-400' : 'text-red-400'}">${isProfit ? '+' : ''}${formatCurrency(m.pnl)}</td>
+                <td class="py-3 px-2 text-right font-mono ${m.returnRate >= 0 ? 'text-green-400' : 'text-red-400'}">${formatPercent(m.returnRate)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 键盘快捷键
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeStockModal();
+    }
+});
+    </script>
+</body>
+</html>
